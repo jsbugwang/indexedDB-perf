@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script type="module">
+        import { openDB, deleteDB, wrap, unwrap } from 'https://cdn.jsdelivr.net/npm/idb@7/+esm';
+
+        const generateRecords = (count = 100) => {
+            const data = [];
+            for (let i = 0; i < count; i++) {
+                const ts = Date.now();
+                data.push({
+                    path: `/path/${Math.random()}`,
+                    size: ts.toString().substring(10, 13)
+                });
+            }
+            return data;
+        }
+
+        /**
+         * 串行执行
+         */
+        const serialInsert = async (db, storeName, records) => {
+            console.time('serialInsert')
+            for (const record of records) {
+                await db.add(storeName, record);
+            }
+            console.timeEnd('serialInsert');
+        }
+
+        const parallelInsert = async (db, storeName, records) => {
+            console.time('parallelInsert');
+            await Promise.all(records.map(record => db.add(storeName, record)));
+            console.timeEnd('parallelInsert');
+        }
+
+        const transactionSerialInsert = async (db, storeName, records) => {
+            console.time('transactionSerialInsert');
+            const tx = db.transaction(storeName, 'readwrite');
+            for (const record of records) {
+                tx.store.add(record);
+            }
+            console.timeEnd('transactionSerialInsert');
+        }
+
+        const transactionParallelInsert = async (db, storeName, records) => {
+            console.time('transactionParallelInsert');
+            const tx = db.transaction(storeName, 'readwrite');
+            await Promise.all([...records.map(record => tx.store.add(record)), tx.done]);
+            console.timeEnd('transactionParallelInsert');
+        }
+      
+        async function open(databaseName, storeName) {
+          const db = await openDB(databaseName, 1, {
+            upgrade(db) {
+              const objectStore = db.createObjectStore(storeName, {
+                keyPath: 'id',
+                autoIncrement: true,
+              });
+              objectStore.createIndex('path', 'path', {unique: true});
+            }
+          });
+          return db;
+        }
+
+        const DB_NAME = 'perf10k';
+        const STORE_NAME = 'upload-progress';
+        const db = await open(DB_NAME, STORE_NAME);
+        await serialInsert(db, STORE_NAME, generateRecords(100));
+        await parallelInsert(db, STORE_NAME, generateRecords(100));
+        await transactionSerialInsert(db, STORE_NAME, generateRecords(100));
+        await transactionParallelInsert(db, STORE_NAME, generateRecords(100));
+      </script>
+</body>
+</html>
