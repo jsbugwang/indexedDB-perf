@@ -43,7 +43,7 @@
             console.time('transactionSerialInsert');
             const tx = db.transaction(storeName, 'readwrite');
             for (const record of records) {
-                tx.store.add(record);
+                await tx.store.add(record);
             }
             console.timeEnd('transactionSerialInsert');
         }
